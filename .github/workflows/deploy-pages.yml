@@ -1,0 +1,89 @@
+# =============================================================================
+# Deploy PuterChat to GitHub Pages
+# =============================================================================
+# PuterChat is a static site (no build step), so this workflow simply packages
+# the repository — minus development-only files — and publishes it to Pages.
+#
+# ONE-TIME SETUP
+#   1. GitHub → repository → Settings → Pages
+#   2. "Build and deployment" → Source → **GitHub Actions**
+#   3. Merge this branch into `main` (or run the workflow manually from the
+#      Actions tab, which works from any branch).
+#
+# The published site lives at https://<owner>.github.io/<repo>/ and works
+# unchanged there: every asset is referenced with a relative path, and
+# Puter.js is loaded from its CDN, so no API keys or secrets are required.
+# =============================================================================
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  # Lets you publish from any branch via Actions → Deploy to GitHub Pages → Run
+  workflow_dispatch:
+
+# Least-privilege token: read the repo, write a Pages deployment.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deployments at once; queue the newest and let it win.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Package static site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Assemble _site (static files only)
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          # Copy everything except VCS/CI/dev-only paths.
+          rsync -a \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '.arena/' \
+            --exclude '_site/' \
+            --exclude 'node_modules/' \
+            ./ _site/
+          # GitHub Pages would otherwise run the files through Jekyll.
+          touch _site/.nojekyll
+          echo "Files to publish:"
+          find _site -maxdepth 2 -type f | sort
+
+      - name: Sanity-check the entry point
+        run: |
+          test -f _site/index.html
+          test -f _site/js/main.js
+          grep -q 'js.puter.com/v2' _site/index.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

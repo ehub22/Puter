@@ -182,8 +182,10 @@ export class Sidebar {
         });
         if (!ok) return;
         const { signOut } = await import('../services/puter.service.js');
+        const { refreshUsage } = await import('../services/usage.service.js');
         signOut();
         this.renderAuth(null);
+        refreshUsage({ force: true }).catch(() => {});  // hides the usage meter
         toast('Signed out of Puter', { type: 'info' });
       });
       area.appendChild(chip);

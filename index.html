@@ -116,6 +116,12 @@
       <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
       <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 16v-4m0-4h.01"/>
     </symbol>
+    <symbol id="icon-gauge" viewBox="0 0 24 24">
+      <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        d="M3.5 18a9 9 0 1 1 17 0"/>
+      <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 14.5 16.5 9"/>
+      <circle cx="12" cy="15" r="1.6" fill="currentColor"/>
+    </symbol>
   </svg>
 
   <!-- ══ App shell ═══════════════════════════════════════════════════ -->
@@ -144,6 +150,9 @@
       </nav>
 
       <div class="sidebar-foot">
+        <!-- Live "how much is left" meter — filled from
+             puter.auth.getMonthlyUsage() (see js/ui/usage-meter.js). -->
+        <div id="usage-area" class="usage-area" hidden></div>
         <div id="auth-area" class="auth-area"></div>
         <button id="settings-btn" class="foot-btn">
           <svg class="icon" aria-hidden="true"><use href="#icon-sliders"></use></svg>
@@ -205,9 +214,19 @@
             <svg class="icon" aria-hidden="true"><use href="#icon-send"></use></svg>
           </button>
         </div>
-        <p class="composer-hint">
-          <kbd>Enter</kbd> to send &nbsp;·&nbsp; <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line &nbsp;·&nbsp; AI can make mistakes
-        </p>
+        <div class="composer-meta">
+          <p class="composer-hint">
+            <kbd>Enter</kbd> to send &nbsp;·&nbsp; <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line &nbsp;·&nbsp; AI can make mistakes
+          </p>
+          <!-- Context-window meter: how many tokens of the selected model's
+               window this conversation (plus the current draft) still has.
+               Estimated locally — see estimateTokens() in js/utils.js. -->
+          <button id="context-meter" class="context-meter" type="button" hidden
+                  aria-label="Context window usage. Opens usage details.">
+            <span class="meter-bar" aria-hidden="true"><span class="meter-fill"></span></span>
+            <span class="meter-text"></span>
+          </button>
+        </div>
       </div>
 
       <div id="sr-status" class="visually-hidden" role="status" aria-live="polite"></div>

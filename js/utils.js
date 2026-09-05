@@ -65,3 +65,51 @@ export function formatTime(ts) {
 export function approxKb(str) {
   return Math.max(1, Math.round((new Blob([str]).size) / 1024));
 }
+
+/* ── Token estimation ──────────────────────────────────────────────────
+ * Puter.js does not expose a tokenizer, so the context meter uses the
+ * usual ~4-characters-per-token heuristic (with a small correction for
+ * whitespace-heavy text such as code). It is an ESTIMATE — always shown
+ * with a “~” in the UI — and is only used for the local context gauge,
+ * never for billing. Real token accounting comes from
+ * puter.auth.getMonthlyUsage() (see js/services/usage.service.js).
+ * ──────────────────────────────────────────────────────────────────── */
+
+/** Rough token count for a piece of text. */
+export function estimateTokens(text) {
+  const s = String(text || '');
+  if (!s) return 0;
+  const words = (s.match(/\S+/g) || []).length;
+  // Average of two cheap heuristics: chars/4 and words*1.33.
+  return Math.max(1, Math.round((s.length / 4 + words * 1.33) / 2));
+}
+
+/** Rough token count for an array of {role, content} chat messages.
+ *  Adds the usual per-message envelope overhead (~4 tokens) plus a few
+ *  tokens for the reply priming, mirroring OpenAI's counting guidance. */
+export function estimateMessagesTokens(messages) {
+  if (!Array.isArray(messages)) return 0;
+  let total = 3;
+  for (const m of messages) total += estimateTokens(m?.content) + 4;
+  return total;
+}
+
+/** 1234 → "1,234"; 128000 → "128k"; 1200000 → "1.2M". */
+export function formatCompact(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '—';
+  if (Math.abs(v) < 1000) return String(Math.round(v));
+  if (Math.abs(v) < 1_000_000) {
+    const k = v / 1000;
+    return (k >= 100 ? Math.round(k) : Math.round(k * 10) / 10) + 'k';
+  }
+  const m = v / 1_000_000;
+  return (m >= 100 ? Math.round(m) : Math.round(m * 10) / 10) + 'M';
+}
+
+/** 1234567 → "1,234,567" */
+export function formatNumber(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '—';
+  return Math.round(v).toLocaleString();
+}

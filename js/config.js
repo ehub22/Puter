@@ -49,28 +49,47 @@ export const APP_CONFIG = {
    * name      → human-friendly label shown in the dropdown
    * provider  → vendor name shown next to the label
    * tagline   → short description (used as the option tooltip)
+   * context   → context-window size in tokens, used by the "tokens left"
+   *             meter under the composer. Approximate: whenever
+   *             puter.ai.listModels() reports a real value for a model it
+   *             overrides the number below (see js/services/models.service.js).
    * ──────────────────────────────────────────────────────────────────── */
   models: [
-    { id: 'gpt-5.6-luna',        name: 'GPT-5.6 Luna',        provider: 'OpenAI',    tagline: 'Fast, affordable everyday chat (default)' },
-    { id: 'gpt-6-astra',         name: 'GPT-6 Astra',         provider: 'OpenAI',    tagline: 'Most capable OpenAI model — reasoning & coding' },
-    { id: 'gpt-5.6-sol',         name: 'GPT-5.6 Sol',         provider: 'OpenAI',    tagline: 'Flagship of the GPT-5.6 family' },
-    { id: 'gpt-5.4-nano',        name: 'GPT-5.4 Nano',        provider: 'OpenAI',    tagline: 'Ultra-fast micro responses' },
-    { id: 'claude-sonnet-5',     name: 'Claude Sonnet 5',     provider: 'Anthropic', tagline: 'Balanced analysis, writing and code' },
-    { id: 'claude-opus-5',       name: 'Claude Opus 5',       provider: 'Anthropic', tagline: 'Deep reasoning for hard problems' },
-    { id: 'claude-haiku-4-5',    name: 'Claude Haiku 4.5',    provider: 'Anthropic', tagline: 'Quick, lightweight answers' },
-    { id: 'claude-fable-5-1',    name: 'Claude Fable 5.1',    provider: 'Anthropic', tagline: 'Frontier agentic coding & research' },
-    { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash-Lite', provider: 'Google', tagline: 'Snappy general-purpose chat' },
-    { id: 'google/gemini-3.8-flash', name: 'Gemini 3.8 Flash', provider: 'Google',   tagline: 'Long-horizon engineering workflows' },
-    { id: 'deepseek-chat',       name: 'DeepSeek Chat',       provider: 'DeepSeek',  tagline: 'Strong open-weight general model' },
-    { id: 'deepseek-reasoner',   name: 'DeepSeek Reasoner',   provider: 'DeepSeek',  tagline: 'Step-by-step reasoning model' },
-    { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B',        provider: 'OpenAI OSS', tagline: 'Open-source GPT-OSS family' },
-    { id: 'openrouter:meta-llama/llama-4-maverick', name: 'Llama 4 Maverick', provider: 'Meta · OpenRouter', tagline: 'Open-weights model via OpenRouter' },
+    { id: 'gpt-5.6-luna',        name: 'GPT-5.6 Luna',        provider: 'OpenAI',    tagline: 'Fast, affordable everyday chat (default)', context: 400000 },
+    { id: 'gpt-6-astra',         name: 'GPT-6 Astra',         provider: 'OpenAI',    tagline: 'Most capable OpenAI model — reasoning & coding', context: 400000 },
+    { id: 'gpt-5.6-sol',         name: 'GPT-5.6 Sol',         provider: 'OpenAI',    tagline: 'Flagship of the GPT-5.6 family', context: 400000 },
+    { id: 'gpt-5.4-nano',        name: 'GPT-5.4 Nano',        provider: 'OpenAI',    tagline: 'Ultra-fast micro responses', context: 400000 },
+    { id: 'claude-sonnet-5',     name: 'Claude Sonnet 5',     provider: 'Anthropic', tagline: 'Balanced analysis, writing and code', context: 200000 },
+    { id: 'claude-opus-5',       name: 'Claude Opus 5',       provider: 'Anthropic', tagline: 'Deep reasoning for hard problems', context: 200000 },
+    { id: 'claude-haiku-4-5',    name: 'Claude Haiku 4.5',    provider: 'Anthropic', tagline: 'Quick, lightweight answers', context: 200000 },
+    { id: 'claude-fable-5-1',    name: 'Claude Fable 5.1',    provider: 'Anthropic', tagline: 'Frontier agentic coding & research', context: 200000 },
+    { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash-Lite', provider: 'Google', tagline: 'Snappy general-purpose chat', context: 1000000 },
+    { id: 'google/gemini-3.8-flash', name: 'Gemini 3.8 Flash', provider: 'Google',   tagline: 'Long-horizon engineering workflows', context: 1000000 },
+    { id: 'deepseek-chat',       name: 'DeepSeek Chat',       provider: 'DeepSeek',  tagline: 'Strong open-weight general model', context: 128000 },
+    { id: 'deepseek-reasoner',   name: 'DeepSeek Reasoner',   provider: 'DeepSeek',  tagline: 'Step-by-step reasoning model', context: 128000 },
+    { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B',        provider: 'OpenAI OSS', tagline: 'Open-source GPT-OSS family', context: 131072 },
+    { id: 'openrouter:meta-llama/llama-4-maverick', name: 'Llama 4 Maverick', provider: 'Meta · OpenRouter', tagline: 'Open-weights model via OpenRouter', context: 1000000 },
   ],
 
   /* Cap on how many history messages are sent with each request. Keeps
    * token usage (and cost to the user) sane on very long conversations.
    * The full history always stays visible in the UI and in storage. */
   maxContextMessages: 60,
+
+  /* ── Token / usage meters ─────────────────────────────────────────────
+   * fallbackContextWindow → assumed context size (tokens) for a model
+   *   whose real window is unknown (not in the list above and not
+   *   reported by puter.ai.listModels()).
+   * contextWarnRatio → the composer meter turns amber above this share of
+   *   the window, and red above contextDangerRatio.
+   * usageRefreshMs → how long a puter.auth.getMonthlyUsage() result is
+   *   reused before it is fetched again (it is also force-refreshed after
+   *   every completed answer).
+   * ──────────────────────────────────────────────────────────────────── */
+  fallbackContextWindow: 128000,
+  contextWarnRatio: 0.7,
+  contextDangerRatio: 0.9,
+  usageRefreshMs: 30000,
 
   /* Suggestions shown in the empty state. */
   suggestedPrompts: [

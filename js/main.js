@@ -19,6 +19,9 @@ import * as puterSvc from './services/puter.service.js';
 import { Sidebar } from './ui/sidebar.js';
 import { ChatView } from './ui/chat-view.js';
 import { SettingsModal, applyTheme } from './ui/settings-modal.js';
+import { UsageMeter } from './ui/usage-meter.js';
+import { setLiveModels } from './services/models.service.js';
+import { refreshUsage } from './services/usage.service.js';
 import { toast } from './ui/toast.js';
 
 async function refreshAuth(sidebar) {
@@ -32,6 +35,8 @@ async function refreshAuth(sidebar) {
   } catch {
     sidebar.renderAuth(null);
   }
+  // Keep the "how much is left this month" meter in sync with auth state.
+  refreshUsage().catch(() => { /* meter shows "unavailable" */ });
 }
 
 function showSdkBanner(message) {
@@ -81,12 +86,20 @@ async function main() {
     onToggleSidebar: () =>
       sidebar.el.classList.contains('open') ? sidebar.close() : sidebar.open(),
     onSignIn: signInFlow,
+    onOpenUsage: () => settingsModal.open({ focus: 'usage' }),
+  });
+
+  /* Sidebar credit/token meter (puter.auth.getMonthlyUsage()). */
+  const usageMeter = new UsageMeter({
+    onOpenDetails: () => settingsModal.open({ focus: 'usage' }),
   });
 
   const settingsModal = new SettingsModal({
     onClose: () => chatView.focusComposer(),
     onClearedAll: () => chatView.openConversation(null),
   });
+
+  usageMeter.render();
 
   /* 4. Store → sidebar sync + initial render. */
   store.subscribe(() => sidebar.render());
@@ -103,15 +116,22 @@ async function main() {
     return;
   }
 
-  puterSvc.listModels().then((live) => chatView.mergeLiveModels(live));
+  puterSvc.listModels().then((live) => {
+    setLiveModels(live);              // real context-window sizes for the meter
+    chatView.mergeLiveModels(live);
+    chatView.updateContextMeter();
+  });
   await refreshAuth(sidebar);
+  refreshUsage({ force: true }).catch(() => { /* non-fatal */ });
 
   /* 6. Shortcuts and persistence guards. */
   window.addEventListener('beforeunload', flushPersistence);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       flushPersistence();
-      refreshAuth(sidebar); // pick up sign-ins done in the Puter popup
+    } else {
+      refreshAuth(sidebar);           // pick up sign-ins done in the Puter popup
+      refreshUsage({ force: true }).catch(() => {});
     }
   });
 

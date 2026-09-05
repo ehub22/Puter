@@ -48,6 +48,11 @@
   --stop-bg: #33312d;
   --stop-fg: #ffffff;
 
+  --meter-track: rgba(30, 25, 18, 0.10);
+  --meter-ok: #3f9f6a;
+  --meter-warn: #d79a2b;
+  --meter-danger: #c23b3b;
+
   --shadow-lg: 0 12px 38px rgba(24, 20, 14, 0.16);
   color-scheme: light;
 }
@@ -85,6 +90,11 @@
 
   --stop-bg: #e8e6e1;
   --stop-fg: #17181a;
+
+  --meter-track: rgba(255, 255, 255, 0.12);
+  --meter-ok: #47b57e;
+  --meter-warn: #e0aa42;
+  --meter-danger: #e05b5b;
 
   --shadow-lg: 0 12px 38px rgba(0, 0, 0, 0.55);
   color-scheme: dark;
@@ -678,6 +688,140 @@ button { font: inherit; }
   background: var(--panel);
 }
 
+
+/* ── 7b. Token / usage meters ─────────────────────────────────────────── */
+
+/* Shared bar used by the sidebar meter, the composer meter and Settings. */
+.meter-bar {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--meter-track);
+  overflow: hidden;
+}
+.meter-bar.lg { height: 8px; margin: 4px 0 12px; }
+.meter-fill {
+  display: block;
+  height: 100%;
+  width: 2%;
+  border-radius: 999px;
+  background: var(--meter-ok);
+  transition: width 0.35s ease, background 0.2s ease;
+}
+.meter-fill.warn { background: var(--meter-warn); }
+.meter-fill.danger { background: var(--meter-danger); }
+
+/* Sidebar: "$0.42 left" card. */
+.usage-area { display: block; }
+.usage-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 9px 10px 10px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.usage-card.is-loading { opacity: 0.75; }
+.usage-head { display: flex; align-items: center; gap: 6px; }
+.usage-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+.usage-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.usage-label:hover { color: var(--accent); }
+.usage-refresh { width: 26px; height: 26px; flex: none; }
+.usage-refresh .icon { width: 14px; height: 14px; }
+.usage-sub { margin: 0; font-size: 11.5px; color: var(--text-3); line-height: 1.4; }
+
+/* Composer: context-window meter. */
+.composer-meta {
+  max-width: 860px;
+  margin: 9px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.composer-meta .composer-hint { margin: 0; }
+.context-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 3px 10px 3px 8px;
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.context-meter:hover { border-color: var(--accent); color: var(--text); }
+.context-meter .meter-bar { width: 46px; height: 4px; }
+.context-meter.warn { color: var(--meter-warn); border-color: var(--warn-border); }
+.context-meter.warn .meter-fill { background: var(--meter-warn); }
+.context-meter.danger { color: var(--meter-danger); border-color: var(--danger-border); }
+.context-meter.danger .meter-fill { background: var(--meter-danger); }
+
+/* Settings: AI usage panel. */
+.usage-panel-section.flash {
+  animation: usage-flash 1.2s ease;
+  border-radius: 12px;
+}
+@keyframes usage-flash {
+  0%, 100% { background: transparent; }
+  25% { background: var(--accent-soft); }
+}
+.usage-panel { margin-top: 4px; }
+.usage-headline { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.usage-headline strong { font-size: 22px; letter-spacing: -0.01em; }
+.usage-headline span { font-size: 13px; color: var(--text-2); }
+.usage-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin: 4px 0 12px;
+}
+.usage-stats dt { font-size: 11.5px; color: var(--text-3); }
+.usage-stats dd { margin: 1px 0 0; font-size: 14px; font-weight: 600; }
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  margin-bottom: 8px;
+}
+.usage-table th, .usage-table td {
+  text-align: left;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.usage-table th { color: var(--text-3); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.usage-table td.num, .usage-table th:not(:first-child) { text-align: right; }
+.usage-table tbody tr:last-child td { border-bottom: 0; }
+.usage-note { margin: 6px 0 0; font-size: 11.5px; color: var(--text-3); line-height: 1.5; }
+.usage-panel-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.usage-panel-actions .btn { text-decoration: none; }
+
 /* ── 8. Buttons ───────────────────────────────────────────────────────── */
 
 .btn, .btn-primary, .btn-danger {
@@ -910,6 +1054,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   .setting-row { flex-direction: column; align-items: flex-start; gap: 10px; }
   .setting-grid { grid-template-columns: 1fr; }
   .toast-root { left: 16px; right: 16px; bottom: 16px; align-items: center; }
+  .usage-stats { grid-template-columns: 1fr 1fr; }
 }
 
 /* Touch devices: hover-only affordances must stay visible. */
@@ -922,6 +1067,11 @@ button:disabled { opacity: 0.45; cursor: default; }
   .chat-header { padding: 8px 10px; }
   .empty-state h1 { font-size: 21px; }
   .model-select { font-size: 12.5px; padding-right: 26px; }
+  /* Keep the composer footer to one readable line on small screens. */
+  .composer-meta { gap: 6px; }
+  .composer-hint { font-size: 11px; }
+  .context-meter { font-size: 11px; }
+  .usage-table th:nth-child(3), .usage-table td:nth-child(3) { display: none; }
 }
 
 /* ── 13. Reduced motion ───────────────────────────────────────────────── */

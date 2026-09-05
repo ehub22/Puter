@@ -8,13 +8,18 @@ import { store, buildApiMessages } from '../state.js';
 import * as puter from '../services/puter.service.js';
 import { renderMarkdown, enhanceCodeBlocks, copyText } from '../services/markdown.service.js';
 import { confirmDialog, toast } from './toast.js';
-import { formatTime } from '../utils.js';
+import { getContextWindow } from '../services/models.service.js';
+import { refreshUsage } from '../services/usage.service.js';
+import {
+  formatTime, estimateTokens, estimateMessagesTokens, formatCompact, formatNumber,
+} from '../utils.js';
 
 export class ChatView {
   /**
    * @param {Object} deps
    * @param {()=>void} deps.onToggleSidebar
    * @param {()=>Promise<void>} deps.onSignIn
+   * @param {()=>void} [deps.onOpenUsage]  open Settings → AI usage section
    */
   constructor(deps) {
     this.deps = deps;
@@ -35,6 +40,7 @@ export class ChatView {
     this.composer = document.getElementById('composer-input');
     this.sendBtn = document.getElementById('send-btn');
     this.srStatus = document.getElementById('sr-status');
+    this.contextMeter = document.getElementById('context-meter');
 
     this.initModelSelect();
     this.bindEvents();
@@ -43,6 +49,7 @@ export class ChatView {
      * conversation switch — see the subscriber). */
     store.subscribe(() => {
       this.syncHeader();
+      this.updateContextMeter();
       const activeId = store.active?.id ?? null;
       if (activeId !== this.currentConvId) this.openConversation(store.active);
     });
@@ -131,6 +138,7 @@ export class ChatView {
       const model = this.modelSelect.value;
       if (store.active) store.setConversationModel(store.active.id, model);
       store.updateSettings({ lastModel: model });
+      this.updateContextMeter();
     });
 
     /* title rename (header) */
@@ -167,7 +175,11 @@ export class ChatView {
     });
 
     /* composer */
-    this.composer.addEventListener('input', () => { this.autosize(); this.updateSendButton(); });
+    this.composer.addEventListener('input', () => {
+      this.autosize();
+      this.updateSendButton();
+      this.updateContextMeter();
+    });
     this.composer.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         if (this.isGenerating) return;           // Enter does nothing mid-stream
@@ -201,6 +213,9 @@ export class ChatView {
       this.jumpBtn.hidden = this.stickToBottom;
     });
     this.jumpBtn.addEventListener('click', () => this.scrollToBottom(true));
+
+    /* context meter → open the usage details in Settings */
+    this.contextMeter?.addEventListener('click', () => this.deps.onOpenUsage?.());
   }
 
   closeMenu() { this.menuEl.hidden = true; }
@@ -266,6 +281,7 @@ export class ChatView {
     this.renderMessages(conv);
     this.scrollToBottom(true);
     this.updateSendButton();
+    this.updateContextMeter();
   }
 
   renderMessages(conv) {
@@ -461,6 +477,10 @@ export class ChatView {
     } finally {
       if (this.generation?.convId === conv.id) this.generation = null;
       this.setGeneratingUI(false);
+      this.updateContextMeter();
+      // Pull fresh account numbers so the "left this month" meter reflects
+      // what this request just cost (Puter bills the user's own account).
+      refreshUsage({ force: true }).catch(() => { /* meter stays as-is */ });
     }
   }
 
@@ -500,6 +520,65 @@ export class ChatView {
     // Disabled while idle-with-no-text, or always while processing (the
     // button becomes the Stop control while generating).
     this.sendBtn.disabled = this.isGenerating ? false : !hasText;
+  }
+
+  /* ═══════════════════ CONTEXT ("tokens left") METER ═══════════════════
+   * Shows how much of the selected model's context window the current
+   * conversation + draft occupy, and therefore how many tokens are left
+   * before older turns start being dropped. Counts are ESTIMATES made
+   * locally (see estimateTokens() in js/utils.js) because Puter.js does
+   * not expose a tokenizer; real, billed token counts for the month are
+   * shown by the usage meter (puter.auth.getMonthlyUsage()).
+   * ══════════════════════════════════════════════════════════════════ */
+
+  /** Token estimate for everything that would be SENT, memoized per
+   *  conversation revision so typing stays cheap on long histories. */
+  historyTokens(conv, settings) {
+    const key = [
+      conv?.id ?? '-', conv?.updatedAt ?? 0, conv?.messages.length ?? 0,
+      (settings.systemPrompt || '').length,
+    ].join('|');
+    if (this._htKey === key) return this._htTokens;
+    const messages = conv
+      ? buildApiMessages(conv, settings)
+      : ((settings.systemPrompt || '').trim()
+        ? [{ role: 'system', content: settings.systemPrompt }]
+        : []);
+    this._htKey = key;
+    this._htTokens = estimateMessagesTokens(messages);
+    return this._htTokens;
+  }
+
+  updateContextMeter() {
+    const el = this.contextMeter;
+    if (!el) return;
+
+    const settings = store.settings;
+    const conv = store.active;
+    const model = this.selectedModel;
+    const { tokens: windowTokens, known } = getContextWindow(model);
+
+    const draft = this.composer.value.trim();
+    const used = this.historyTokens(conv, settings) + (draft ? estimateTokens(draft) + 4 : 0);
+    const left = Math.max(0, windowTokens - used);
+    const ratio = Math.min(1, used / windowTokens);
+
+    el.hidden = false;
+    el.classList.toggle('warn', ratio >= APP_CONFIG.contextWarnRatio && ratio < APP_CONFIG.contextDangerRatio);
+    el.classList.toggle('danger', ratio >= APP_CONFIG.contextDangerRatio);
+
+    const fill = el.querySelector('.meter-fill');
+    if (fill) fill.style.width = `${Math.max(2, ratio * 100)}%`;
+
+    const text = el.querySelector('.meter-text');
+    if (text) text.textContent = `~${formatCompact(left)} tokens left`;
+
+    el.title =
+      `≈${formatNumber(used)} of ${formatNumber(windowTokens)} context tokens used ` +
+      `(~${formatNumber(left)} left) for ${model}` +
+      (known ? '' : ' — window size unknown, assuming the configured default') +
+      `.\nOnly the last ${APP_CONFIG.maxContextMessages} messages are sent; ` +
+      'counts are estimates. Click for account usage details.';
   }
 
   /* ── streaming placeholder ────────────────────────────────────────── */

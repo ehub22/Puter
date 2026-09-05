@@ -5,6 +5,10 @@
 
 import { store } from '../state.js';
 import * as storage from '../services/storage.service.js';
+import {
+  usageState, subscribeUsage, refreshUsage, formatCredits, prettyApiName,
+} from '../services/usage.service.js';
+import { formatCompact, formatNumber } from '../utils.js';
 import { confirmDialog, toast } from './toast.js';
 
 export class SettingsModal {
@@ -18,8 +22,15 @@ export class SettingsModal {
     this.overlay = null;
   }
 
-  open() {
-    if (this.overlay) return;
+  /**
+   * @param {Object} [opts]
+   * @param {'usage'} [opts.focus] scroll straight to a section
+   */
+  open(opts = {}) {
+    if (this.overlay) {
+      if (opts.focus === 'usage') this.scrollToUsage();
+      return;
+    }
     const s = store.settings;
 
     const overlay = document.createElement('div');
@@ -81,6 +92,26 @@ export class SettingsModal {
             </section>
           </div>
 
+          <section class="setting-col usage-panel-section" data-usage-section>
+            <h3>AI usage this month</h3>
+            <p class="setting-desc">
+              Live numbers from your own Puter account
+              (<code>puter.auth.getMonthlyUsage()</code>), scoped to this app.
+              Puter bills AI usage to the signed-in user, so this is your
+              remaining allowance — not the developer's.
+            </p>
+            <div data-usage-panel class="usage-panel"></div>
+            <div class="usage-panel-actions">
+              <button type="button" class="btn" data-usage-refresh>
+                <svg class="icon" aria-hidden="true"><use href="#icon-refresh"></use></svg>
+                Refresh usage
+              </button>
+              <a class="btn ghost" href="https://puter.com/dashboard#usage" target="_blank" rel="noopener">
+                Open Puter dashboard
+              </a>
+            </div>
+          </section>
+
           <section class="setting-col danger-zone">
             <h3>Stored data</h3>
             <p class="setting-desc">
@@ -103,6 +134,8 @@ export class SettingsModal {
     const close = () => {
       overlay.remove();
       this.overlay = null;
+      this.unsubscribeUsage?.();
+      this.unsubscribeUsage = null;
       document.removeEventListener('keydown', onKey, true);
       this.deps.onClose?.();
     };
@@ -179,8 +212,30 @@ export class SettingsModal {
       this.deps.onClearedAll?.();
     });
 
+    /* AI usage panel — re-renders whenever the usage service updates. */
+    const panel = overlay.querySelector('[data-usage-panel]');
+    this.unsubscribeUsage = subscribeUsage(() => renderUsagePanel(panel));
+    overlay.querySelector('[data-usage-refresh]').addEventListener('click', (e) => {
+      e.currentTarget.disabled = true;
+      refreshUsage({ force: true }).finally(() => {
+        if (this.overlay) e.currentTarget.disabled = false;
+      });
+    });
+    refreshUsage();
+
     document.getElementById('modal-root').appendChild(overlay);
     modal.querySelector('[data-close]').focus();
+    if (opts.focus === 'usage') this.scrollToUsage();
+  }
+
+  scrollToUsage() {
+    const section = this.overlay?.querySelector('[data-usage-section]');
+    if (!section) return;
+    requestAnimationFrame(() => {
+      section.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      section.classList.add('flash');
+      setTimeout(() => section.classList.remove('flash'), 1200);
+    });
   }
 
   trapFocus(modal, e) {
@@ -193,6 +248,119 @@ export class SettingsModal {
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
+}
+
+/* ── AI usage panel ───────────────────────────────────────────────────── */
+
+/** Render the current usageState snapshot into the settings panel. */
+function renderUsagePanel(el) {
+  if (!el) return;
+  el.textContent = '';
+  const { data, loading, error, signedIn } = usageState;
+
+  if (!signedIn) {
+    el.appendChild(note('Sign in to Puter to see how much of your monthly allowance is left.'));
+    return;
+  }
+  if (loading && !data) {
+    el.appendChild(note('Loading usage…'));
+    return;
+  }
+  if (error && !data) {
+    el.appendChild(note(error));
+    return;
+  }
+  if (!data) {
+    el.appendChild(note('No usage data available for this app yet.'));
+    return;
+  }
+
+  /* Headline: remaining allowance + progress bar. */
+  const head = document.createElement('div');
+  head.className = 'usage-headline';
+  const big = document.createElement('strong');
+  big.textContent = data.remaining != null ? formatCredits(data.remaining) : '—';
+  const small = document.createElement('span');
+  small.textContent = data.allowance != null
+    ? ` left of ${formatCredits(data.allowance)} this month`
+    : ' remaining';
+  head.append(big, small);
+  el.appendChild(head);
+
+  if (data.percentRemaining != null) {
+    const bar = document.createElement('div');
+    bar.className = 'meter-bar lg';
+    bar.setAttribute('role', 'progressbar');
+    bar.setAttribute('aria-label', 'Monthly allowance remaining');
+    bar.setAttribute('aria-valuemin', '0');
+    bar.setAttribute('aria-valuemax', '100');
+    bar.setAttribute('aria-valuenow', String(Math.round(data.percentRemaining)));
+    const fill = document.createElement('span');
+    fill.className = 'meter-fill';
+    fill.style.width = `${Math.max(2, data.percentRemaining)}%`;
+    if (data.percentRemaining <= 10) fill.classList.add('danger');
+    else if (data.percentRemaining <= 30) fill.classList.add('warn');
+    bar.appendChild(fill);
+    el.appendChild(bar);
+  }
+
+  /* Key numbers. */
+  const stats = document.createElement('dl');
+  stats.className = 'usage-stats';
+  const rows = [
+    ['Tokens used (AI)', data.aiTokens ? formatNumber(data.aiTokens) : '0'],
+    ['Est. tokens left', data.estimatedTokensLeft != null
+      ? '~' + formatNumber(data.estimatedTokensLeft) : 'n/a'],
+    ['AI requests', formatNumber(data.aiRequests || 0)],
+    ['Spent this month', formatCredits(data.used ?? data.totalCost)],
+  ];
+  for (const [k, v] of rows) {
+    const dt = document.createElement('dt'); dt.textContent = k;
+    const dd = document.createElement('dd'); dd.textContent = v;
+    stats.append(dt, dd);
+  }
+  el.appendChild(stats);
+
+  /* Per-API breakdown. */
+  if (data.byApi.length) {
+    const table = document.createElement('table');
+    table.className = 'usage-table';
+    table.innerHTML =
+      '<thead><tr><th scope="col">API</th><th scope="col">Calls</th>' +
+      '<th scope="col">Units</th><th scope="col">Cost</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    for (const row of data.byApi.slice(0, 8)) {
+      const tr = document.createElement('tr');
+      const cells = [
+        prettyApiName(row.name),
+        formatNumber(row.count),
+        row.units ? formatCompact(row.units) : '—',
+        formatCredits(row.cost),
+      ];
+      cells.forEach((c, i) => {
+        const td = document.createElement('td');
+        td.textContent = c;
+        if (i > 0) td.className = 'num';
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    el.appendChild(table);
+  }
+
+  el.appendChild(note(
+    'Units are tokens for AI calls and bytes for storage calls. ' +
+    '"Est. tokens left" extrapolates your remaining allowance from this ' +
+    "month's average token price, so it moves with the models you pick."
+  ));
+}
+
+function note(text) {
+  const p = document.createElement('p');
+  p.className = 'usage-note';
+  p.textContent = text;
+  return p;
 }
 
 /** Apply 'light' | 'dark' | 'system' to <html data-theme>. Exported here so
