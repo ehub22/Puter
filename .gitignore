@@ -1,0 +1,10 @@
+# Local tooling / scratch (Arena workspace, editors, OS cruft)
+.arena/
+.DS_Store
+Thumbs.db
+
+# Node artifacts (not needed by this static app, but kept out just in case)
+node_modules/
+
+# Python local-server caches
+__pycache__/
